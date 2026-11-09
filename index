@@ -1,0 +1,587 @@
+<title>通勤試算器</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@900&display=swap" rel="stylesheet">
+<style>
+/* Layout: toolbar on top, real map left, readout panel right; stacks on phones */
+:root{
+  --bg:#edf1f5; --surface:#ffffff; --brand:#132a4a; --brandSoft:#1d3a63; --shadow:0 1px 2px rgba(16,32,60,.06),0 6px 20px rgba(16,32,60,.07); --ink:#18212b; --muted:#5b6876; --line:#d3dae0;
+  --land:#f5f3ec; --sea:#cfdde6;
+  --accent:#c8102e; --accent2:#1f5f99; --good:#1f7a4d; --bad:#b3261e; --chip:#e2e7eb; --chipOn:#18212b; --chipOnFg:#ffffff;
+  --f-display:"Noto Serif TC","Songti TC",serif;
+  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f141a; --surface:#18202a; --brand:#0d1b2e; --brandSoft:#1a2d47; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25); --ink:#e6ebef; --muted:#9aa7b3; --line:#2c3640; --land:#1c232a; --sea:#0e1b25;
+  --accent:#ff5a5f; --accent2:#6aa8e8; --good:#4cc38a; --bad:#ff6b5e; --chip:#252e37; --chipOn:#e6ebef; --chipOnFg:#11161b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f141a; --surface:#18202a; --brand:#0d1b2e; --brandSoft:#1a2d47; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25); --ink:#e6ebef; --muted:#9aa7b3; --line:#2c3640; --land:#1c232a; --sea:#0e1b25;
+  --accent:#ff5a5f; --accent2:#6aa8e8; --good:#4cc38a; --bad:#ff6b5e; --chip:#252e37; --chipOn:#e6ebef; --chipOnFg:#11161b; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55}
+.wrap{max-width:none;margin:0;padding-block:14px 32px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:14px}
+h1{font-family:var(--f-display);font-weight:900;font-size:clamp(26px,3.4vw,34px);line-height:1.2;margin:0 0 4px;letter-spacing:.04em;text-wrap:balance}
+.hero{background:linear-gradient(120deg,var(--brand),var(--brandSoft));color:#fff;border-radius:16px;padding:18px 24px;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px 24px;box-shadow:var(--shadow)}
+.hero .lede{margin:0;color:rgba(255,255,255,.78);max-width:none}
+.hero-legend{display:flex;gap:16px;font-size:13px;color:rgba(255,255,255,.9);flex-wrap:wrap}
+.hero-legend span{display:flex;align-items:center;gap:6px}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}
+.dot.nh{background:#e0313f}.dot.tc{background:#2f7bd0}.dot.home{background:#0f8a5f}
+.hero .dot{box-shadow:0 0 0 2px rgba(255,255,255,.85)}
+.controls{background:var(--surface);border-radius:16px;padding:16px 18px 14px;box-shadow:var(--shadow);display:grid;gap:16px}
+.toolbar{display:flex;flex-wrap:wrap;gap:20px 20px;align-items:flex-start;padding-bottom:6px}
+.field{display:grid;gap:5px;font-size:12px;color:var(--muted)}
+select,input{font:inherit;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-width:0}
+select:focus-visible,input:focus-visible,button:focus-visible{outline:2px solid var(--accent2);outline-offset:2px}
+.seg{display:flex;flex-wrap:wrap;background:var(--chip);border-radius:9px;padding:3px;gap:2px}
+.seg button{font:inherit;font-size:13px;border:0;background:transparent;color:var(--ink);padding:5px 11px;border-radius:7px;cursor:pointer}
+.seg button.off{opacity:.4;text-decoration:line-through}
+.seg button.on{background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.18);font-weight:700}
+.addr{flex:0 0 100%;max-width:none}
+.addr .addr-row{max-width:760px}
+.addr-row{display:flex;gap:6px}
+.addr-row input{flex:1;min-width:0}
+.addr-row button{font:inherit;font-size:14px;font-weight:700;border:0;border-radius:8px;padding:7px 18px;background:var(--brand);color:#fff;cursor:pointer}
+.addr{position:relative}
+.addr-msg{position:absolute;top:100%;left:0;margin-top:3px;font-size:12px;color:var(--muted);white-space:nowrap}
+.toolbar select,.toolbar input,.addr-row button{height:38px;box-sizing:border-box}
+.toolbar .seg{height:38px;box-sizing:border-box;align-items:stretch}
+.toolbar .chk{height:38px;padding:0 4px}
+.toolbar input[type=checkbox]{height:auto;width:16px;padding:0}
+.addr-msg.err{color:var(--bad)}
+.chk{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--ink);padding-bottom:7px}
+.presets{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.plabel{font-size:12px;color:var(--muted);margin-right:4px}
+.chip{font:inherit;font-size:13px;border:0;background:var(--chip);color:var(--ink);padding:4px 11px;border-radius:999px;cursor:pointer}
+.chip.on{background:var(--brand);color:#fff}
+.chip:hover{filter:brightness(.96)}
+.app{display:grid;grid-template-columns:minmax(0,65fr) minmax(0,35fr);gap:14px;align-items:stretch;--mapH:clamp(480px,calc(100vh - 230px),1400px)}
+.app>.panel{height:var(--mapH);overflow-y:auto;align-content:start;box-sizing:border-box;scrollbar-width:thin}
+@media (max-width:900px){.app>.panel{height:auto;overflow:visible}}
+@media (max-width:900px){.app{grid-template-columns:minmax(0,1fr)}}
+.mapcard{position:relative;border:0;box-shadow:var(--shadow);border-radius:16px;overflow:hidden;min-width:0;background:var(--land)}
+#map{width:100%;height:var(--mapH)}
+@media (max-width:900px){#map{height:clamp(380px,62vh,580px)}}
+.notice{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:1200;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:7px 12px;font-size:12px;width:min(520px,calc(100% - 120px));box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.panel{background:var(--surface);border:0;box-shadow:var(--shadow);border-radius:16px;padding:20px;display:grid;gap:20px;min-width:0}
+.eyebrow{font-size:12px;letter-spacing:.08em;color:var(--muted)}
+.panel h2{font-size:24px;font-family:var(--f-display);font-weight:900;letter-spacing:.03em;margin:2px 0 0;line-height:1.3}
+.panel h3{font-size:13px;letter-spacing:.06em;color:var(--muted);margin:0 0 8px;font-weight:500}
+.meta{margin:4px 0 0;color:var(--muted);font-size:13px}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.empty{color:var(--muted);font-size:14px}
+.tblwrap{border:1px solid var(--line);border-radius:12px;overflow:hidden}
+table.mx th{background:var(--bg);padding:8px 8px;line-height:1.35;vertical-align:bottom;border-bottom:0;color:var(--muted)}
+table.mx th .dot{width:8px;height:8px;margin-right:4px;vertical-align:1px}
+table.mx td{padding:11px 8px}
+table.mx tbody tr:last-child td{border-bottom:0}
+table.mx tbody tr:hover td{background:color-mix(in srgb,var(--bg) 55%,transparent)}
+table.mx td .md{display:flex;align-items:center;gap:7px;white-space:nowrap}
+table.mx .ic{width:26px;height:26px;border-radius:7px;background:var(--bg);display:grid;place-items:center;flex:none}
+table.mx .ic svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ck2{display:block}.ck2.y{color:var(--good)}.ck2.n{color:var(--bad)}
+.rule{margin:-4px 0 10px;font-size:12px;color:var(--muted)}
+.modes{display:grid;gap:10px}
+.mode{border:1px solid var(--line);border-radius:12px;padding:12px 14px;display:grid;gap:8px;background:var(--surface)}
+.mode-h{display:flex;align-items:center;gap:8px;font-size:15px}
+.mode-h .ic{width:28px;height:28px;border-radius:8px;background:var(--bg);display:grid;place-items:center;color:var(--ink)}
+.mode-h .ic svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mode-h .sub{margin-left:auto}
+.bar-row{display:grid;grid-template-columns:62px minmax(0,1fr) auto;align-items:center;gap:10px;font-size:13px}
+.who{display:flex;align-items:center;gap:6px;color:var(--muted);white-space:nowrap}
+.track{height:10px;background:var(--bg);border-radius:999px;overflow:hidden}
+.fill{height:100%;border-radius:999px;transition:width .35s ease}
+.fill.tc{background:#2f7bd0}.fill.nh{background:#e0313f}
+.val{text-align:right;white-space:nowrap;color:var(--muted);min-width:86px}
+.val b{font-family:var(--f-num);font-size:17px;font-weight:600;color:var(--ink)}
+.val small{display:block;font-size:11px;font-family:var(--f-num);line-height:1.3}
+.diff{font-size:13px;color:var(--muted)}
+.diff b{font-family:var(--f-num)}
+.diff.up b{color:var(--bad)}.diff.down b{color:var(--good)}
+.checks{display:flex;flex-wrap:wrap;gap:6px}
+.ck{font-size:11.5px;padding:2px 8px;border-radius:999px;font-family:var(--f-num);white-space:nowrap}
+.ck.y{background:color-mix(in srgb,var(--good) 14%,transparent);color:var(--good)}
+.ck.n{background:color-mix(in srgb,var(--bad) 10%,transparent);color:var(--bad)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{font-size:12px;font-weight:500;color:var(--muted);text-align:right;padding:4px 6px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+td{padding:8px 6px;border-bottom:1px solid var(--line);text-align:right;vertical-align:top}
+td b{font-family:var(--f-num);font-size:16px;font-weight:600;white-space:nowrap}
+td .sl{color:var(--muted);margin:0 2px;font-weight:400}
+td small{display:block;font-size:11px;color:var(--muted);font-family:var(--f-num)}
+td .md{font-weight:700}
+.up{color:var(--bad)} .down{color:var(--good)}
+.sub{display:inline-block;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.sub.y{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good)}
+.sub.n{background:var(--chip);color:var(--muted)}
+.cond{display:grid;gap:1px;font-size:11px;margin-top:4px;white-space:nowrap;font-family:var(--f-num)}
+.cond .ck{color:var(--good)} .cond .xx{color:var(--bad)}
+.thn{font-size:10px;white-space:nowrap}
+.src{font-size:11px;color:var(--muted);margin-top:6px}
+.peaknote{margin-top:10px;padding:10px 12px;background:var(--bg);border-radius:8px;font-size:12px;color:var(--muted);display:grid;gap:4px;line-height:1.6}
+.peaknote b{color:var(--ink)}
+.pn-h{font-size:13px;font-weight:700;color:var(--ink);letter-spacing:.06em;cursor:pointer}
+.peaknote[open] .pn-h{margin-bottom:4px}
+.tabs{display:flex;gap:2px;background:var(--chip);border-radius:9px;padding:3px;margin-bottom:10px}
+.tabs button{flex:1;font:inherit;font-size:13px;border:0;background:transparent;color:var(--ink);padding:6px;border-radius:7px;cursor:pointer}
+.tabs button.on{background:var(--surface);font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.18)}
+ol.route{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+ol.route li{display:grid;grid-template-columns:6px 1fr auto;gap:10px;align-items:center;font-size:14px}
+ol.route li i{align-self:stretch;border-radius:3px;background:var(--line);min-height:22px}
+ol.route li span.t{font-family:var(--f-num);color:var(--muted);font-size:13px}
+.maplegend{font-size:12px;color:var(--muted);margin-top:8px;display:flex;gap:14px;flex-wrap:wrap}
+.maplegend span::before{content:"";display:inline-block;width:18px;height:0;border-top:3px solid currentColor;vertical-align:middle;margin-right:5px}
+.maplegend .lg-car{color:#6b7280}.maplegend .lg-car::before{border-top-style:dashed}
+.gm{display:inline-block;margin-top:10px;font-size:14px;font-weight:500;color:var(--accent2);text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:7px 12px}
+.gm:hover{background:var(--bg)}
+.gm-note{margin:6px 0 0;font-size:11px;color:var(--muted)}
+.copy{font:inherit;font-size:14px;font-weight:500;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;padding:9px 12px;cursor:pointer}
+details.method{background:var(--surface);border:0;box-shadow:var(--shadow);border-radius:16px;padding:12px 16px;font-size:13px;color:var(--muted)}
+details.method summary{cursor:pointer;color:var(--ink);font-weight:500}
+details.method ul{margin:8px 0 0;padding-left:1.2em;display:grid;gap:4px;max-width:none}
+/* heat legend on map */
+.hlegend{background:#fff;color:#333;border-radius:8px;padding:8px 10px;font-size:11px;width:230px;box-shadow:0 1px 5px rgba(0,0,0,.3);font-family:var(--f-body)}
+.hlegend b{font-size:12px;color:#111}
+.hbar{height:9px;border-radius:3px;margin:6px 0 2px}
+.bands{display:grid;grid-template-columns:1fr 1fr;gap:3px 10px;margin:6px 0 4px}
+.bands span{display:flex;align-items:center;gap:5px;font-size:11px;color:#333}
+.bands i{width:14px;height:10px;border-radius:2px;opacity:.85}
+.hnote{font-size:10.5px;color:#555}
+.hticks{display:flex;justify-content:space-between;font-family:var(--f-num);font-size:10px}
+.dlab{font-family:var(--f-body);font-size:12px;font-weight:700;color:#1d2a36;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 2px #fff;white-space:nowrap;transform:translate(-50%,-50%);pointer-events:none}
+.dlab.t2{font-weight:500;color:#5b6876}
+.clab{font-family:var(--f-display);font-size:20px;font-weight:900;letter-spacing:.3em;color:rgba(70,80,95,.35);white-space:nowrap;transform:translate(-50%,-50%);pointer-events:none}
+.slegend{background:rgba(255,255,255,.92);border-radius:8px;padding:7px 10px;font-size:11px;color:#333;box-shadow:0 1px 4px rgba(0,0,0,.25);display:grid;grid-template-columns:auto auto;gap:3px 12px;font-family:var(--f-body)}
+.slegend span{display:flex;align-items:center;gap:5px}
+.slegend i{width:16px;height:4px;border-radius:2px;display:inline-block}
+.slegend i.bd{height:0;border-top:1.6px dashed #8a8f98;border-radius:0}
+.slegend div{grid-column:1/-1;color:#777;font-size:10px}
+.homepin{position:relative}
+.homepin svg{display:block;filter:drop-shadow(0 1px 2px rgba(0,0,0,.25))}
+.homepin span{position:absolute;left:50%;top:-20px;transform:translateX(-50%);background:#0f8a5f;color:#fff;font-family:var(--f-body);font-size:12px;font-weight:700;padding:1px 8px;border-radius:999px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.mklab{font-family:var(--f-body);font-weight:700;font-size:13px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ---- Leaflet essentials (inlined; the CDN stylesheet is optional) ---- */
+.leaflet-pane,.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow,.leaflet-tile-container,.leaflet-pane>svg,.leaflet-pane>canvas,.leaflet-zoom-box,.leaflet-image-layer,.leaflet-layer{position:absolute;left:0;top:0}
+.leaflet-container{overflow:hidden;font-family:var(--f-body);font-size:12px;-webkit-tap-highlight-color:transparent;background:var(--land);outline-offset:1px}
+.leaflet-tile,.leaflet-marker-icon,.leaflet-marker-shadow{user-select:none;-webkit-user-drag:none}
+.leaflet-tile{filter:inherit;visibility:hidden}.leaflet-tile-loaded{visibility:inherit}
+.leaflet-container img.leaflet-tile,.leaflet-container img.leaflet-image-layer,.leaflet-container .leaflet-overlay-pane svg,.leaflet-container .leaflet-marker-pane img{max-width:none!important;max-height:none!important;width:auto;padding:0}
+.leaflet-container img.leaflet-image-layer{width:auto}
+.leaflet-pane{z-index:400}.leaflet-tile-pane{z-index:200}.leaflet-overlay-pane{z-index:400}.leaflet-shadow-pane{z-index:500}.leaflet-marker-pane{z-index:600}.leaflet-tooltip-pane{z-index:650}.leaflet-popup-pane{z-index:700}
+.leaflet-map-pane canvas{z-index:100}.leaflet-map-pane svg{z-index:200}
+.leaflet-zoom-box{width:0;height:0;box-sizing:border-box;z-index:800;border:2px dotted #38f;background:rgba(255,255,255,.5)}
+.leaflet-control{position:relative;z-index:800;pointer-events:auto;float:left;clear:both}
+.leaflet-top,.leaflet-bottom{position:absolute;z-index:1000;pointer-events:none}
+.leaflet-top{top:0}.leaflet-right{right:0}.leaflet-bottom{bottom:0}.leaflet-left{left:0}
+.leaflet-right .leaflet-control{float:right}
+.leaflet-top .leaflet-control{margin-top:10px}.leaflet-bottom .leaflet-control{margin-bottom:10px}.leaflet-left .leaflet-control{margin-left:10px}.leaflet-right .leaflet-control{margin-right:10px}
+.leaflet-zoom-animated{transform-origin:0 0}
+.leaflet-zoom-anim .leaflet-zoom-animated{transition:transform .25s cubic-bezier(0,0,.25,1)}
+.leaflet-zoom-anim .leaflet-tile,.leaflet-pan-anim .leaflet-tile{transition:none}
+.leaflet-zoom-anim .leaflet-zoom-hide{visibility:hidden}
+.leaflet-interactive{cursor:pointer}.leaflet-grab{cursor:grab}
+.leaflet-crosshair,.leaflet-crosshair .leaflet-interactive,.leaflet-container.crosshair{cursor:crosshair}
+.leaflet-dragging .leaflet-grab{cursor:move}
+.leaflet-bar{box-shadow:0 1px 5px rgba(0,0,0,.4);border-radius:6px}
+.leaflet-bar a{background:#fff;border-bottom:1px solid #ccc;width:32px;height:32px;line-height:32px;display:block;text-align:center;text-decoration:none;color:#111;font:bold 18px/32px system-ui,sans-serif}
+.leaflet-bar a:first-child{border-radius:6px 6px 0 0}.leaflet-bar a:last-child{border-radius:0 0 6px 6px;border-bottom:none}
+.leaflet-control-attribution{background:rgba(255,255,255,.85);margin:0!important;padding:0 5px;color:#333;font-size:10px}
+.leaflet-control-attribution a{color:#0b5c8a}
+.leaflet-tooltip{position:absolute;padding:2px 7px;background:#fff;border:1px solid #fff;border-radius:4px;color:#111;white-space:nowrap;user-select:none;pointer-events:none;box-shadow:0 1px 3px rgba(0,0,0,.35)}
+.leaflet-tooltip-right{margin-left:8px}.leaflet-tooltip-left{margin-left:-8px}
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <div>
+      <h1>通勤試算器</h1>
+      <p class="lede">點地圖任一處當作住家，試算到土城廠、內湖廠的距離與通勤時間（開車、機車、大眾運輸）。</p>
+    </div>
+    <div class="hero-legend"><span><i class="dot nh"></i>內湖廠</span><span><i class="dot tc"></i>土城廠</span><span><i class="dot home"></i>住家</span></div>
+  </header>
+
+  <section class="controls">
+  <div class="toolbar">
+    <div class="field">地圖模式
+      <div class="seg" id="baseSeg">
+        <button data-b="osm" class="on">街道圖</button>
+        <button data-b="light">簡潔</button>
+        <button data-b="sat">衛星</button>
+        <button data-b="schema">示意圖</button>
+      </div>
+    </div>
+    <div class="field">路線圖層
+      <label class="chk" for="showNet"><input type="checkbox" id="showNet" checked> 顯示捷運／台鐵</label></div>
+    <label class="field" for="heat">內湖時間圖層
+      <select id="heat"><option value="off" selected>不顯示</option><option value="N">以內湖廠為中心</option></select></label>
+    <label class="field" for="heatMode">圖層交通方式
+      <select id="heatMode"><option value="transit" selected>大眾運輸</option><option value="car">開車</option><option value="scooter">機車</option></select></label>
+    <form class="field addr" id="addrForm"><label for="search">輸入地址或地點</label>
+      <div class="addr-row"><input id="search" placeholder="例如：龍潭區中正路100號、青年公園、土城國小" autocomplete="off"><button type="submit" id="addrBtn">查詢</button></div>
+      <span class="addr-msg" id="addrMsg"></span></form>
+  </div>
+
+  <div class="presets" id="presets"><span class="plabel">快速選點</span></div>
+  </section>
+
+  <main class="app">
+    <section class="mapcard">
+      <div id="map" aria-label="地圖，點擊選擇住家位置"></div>
+      <div class="notice" id="notice" hidden></div>
+    </section>
+
+    <aside class="panel">
+      <div>
+        <div class="eyebrow">住家位置</div>
+        <h2 id="pName">尚未選點</h2>
+        <p class="meta" id="pMeta">在地圖上點一下，或按上方的快速選點。</p>
+      </div>
+      <div>
+        <h3>試算（距離 公里 ／ 尖峰時間 分）</h3>
+        <div class="tblwrap"><table class="mx">
+          <thead><tr><th>方式</th><th><i class="dot tc"></i>到土城廠<br><span class="thn">公里／分</span></th><th><i class="dot nh"></i>到內湖廠<br><span class="thn">公里／分</span></th><th>差異<br><span class="thn">公里／分</span></th><th>補助檢核<br><span class="thn">距離≧30 km，或<br>多&gt;50 且單程&gt;90 分</span></th></tr></thead>
+          <tbody id="tbody"><tr><td colspan="5" class="empty">選點後顯示</td></tr></tbody>
+        </table></div>
+        <details class="peaknote">
+          <summary class="pn-h">說明（距離、尖峰與離峰）</summary>
+          <div><b>距離</b>：<span id="src"></span></div>
+          <div><b>補助檢核</b>：符合任一條件即「符合」。<br>條件 1 距離：新舊工作地相距 ≧ 30 km「且」住家到內湖廠 ≧ 30 km（兩廠約 <span id="plantKm"></span> km，未達 30 km）。<br>條件 2 時間：通勤比到土城增加 &gt; 50 分「且」到內湖單程 &gt; 90 分（以尖峰時間判斷）。</div>
+          <div><b>尖峰</b>：上班 07:00–09:00、下班 17:00–19:00。開車到內湖 = 離峰 × 1.7（內科、堤頂、國道一號常堵），到土城 × 1.45；機車以時速 35–45 公里估範圍、尖峰 × 1.25（差異與補助檢核用時速 40 公里）；大眾運輸公車段 × 1.35、捷運／台鐵段 × 1.1（車廂擁擠、可能要多等一班）。</div>
+          <div><b>離峰</b>：其他時段，車流較少，但仍計入紅綠燈與市區走走停停（開車約多 4 成、機車每公里多 0.5 分）。</div>
+          <div>→ 一般上下班通勤請看<b>尖峰</b>時間。</div>
+        </details>
+      </div>
+      <div>
+        <h3>大眾運輸路線（尖峰）</h3>
+        <div class="tabs" id="destTabs"><button data-d="N" class="on">到內湖廠</button><button data-d="T">到土城廠</button></div>
+        <ol class="route" id="route"></ol>
+        <a class="gm" id="gmLink" href="https://www.google.com/maps" target="_blank" rel="noopener">在 Google 地圖查實際公車路線與班次 ↗</a>
+        <p class="gm-note">公車路線號（如 205、中山幹線）需即時公車資料，請用上方連結查看。</p>
+      </div>
+      <button class="copy" id="copy">複製試算結果</button>
+    </aside>
+  </main>
+
+  <details class="method">
+    <summary>試算方法與限制</summary>
+    <ul>
+      <li>所有時間都是約略值（誤差約 ±20%），實際依個人路線、班次與當日路況而定。</li>
+      <li>開車：能連上路線服務時，用實際道路路線（OSRM）的距離與時間，再加計紅綠燈與市區走走停停（× 1.4 ＋ 5 分）；連不上時改用「直線距離 × 1.3」估算。尖峰到內湖 × 1.7（內科、堤頂、國道一號塞車），到土城 × 1.45。</li>
+      <li>機車：依市區速限，以時速 35–45 公里估算，另加紅綠燈每公里 0.5 分，表格顯示這個範圍（快～慢）；差異與補助檢核用中間值時速 40 公里計算。尖峰 × 1.25。</li>
+      <li>大眾運輸：步行或公車接駁到最適合的車站，走捷運、機場捷運、台鐵、高鐵路網（含候車、轉乘），出站再步行到廠區（內湖廠從西湖站約 5 分、土城廠從頂埔站約 13 分）。尖峰時公車段 × 1.35、捷運／台鐵段 × 1.1。沒有計入國道客運直達班次。</li>
+      <li>地圖底圖：街道圖為內政部國土測繪中心電子地圖，簡潔為同來源的灰階版，衛星為 Esri；某一種載入失敗會自動換下一種。若底圖無法顯示，會自動改成示意圖；把這個網頁另存成 HTML 檔、用瀏覽器開啟，就能看到完整地圖。</li>
+    </ul>
+  </details>
+</div>
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+if(!window.L){$('#notice').hidden=false;$('#notice').textContent='地圖程式載入失敗，請確認網路連線後重新整理。';return;}
+
+/* ---------- planar km helpers for the time model ---------- */
+const B={lon0:120.90,lon1:121.86,lat0:24.76,lat1:25.32},KX=101.0,KY=111.0;
+const W=(B.lon1-B.lon0)*KX,H=(B.lat1-B.lat0)*KY;
+const P=(lat,lon)=>[(lon-B.lon0)*KX,(B.lat1-lat)*KY];
+const toLL=(x,y)=>[B.lat1-y/KY,B.lon0+x/KX];
+const dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]);
+
+/* ---------- stations ---------- */
+const SLL={
+'動物園':[24.9982,121.5794],'木柵':[24.9982,121.5733],'萬芳社區':[24.9986,121.5681],'萬芳醫院':[24.9993,121.5581],'辛亥':[25.0055,121.5571],'麟光':[25.0186,121.5588],'六張犁':[25.0238,121.5530],'科技大樓':[25.0261,121.5435],'大安':[25.0330,121.5436],'忠孝復興':[25.0416,121.5437],'南京復興':[25.0520,121.5441],'中山國中':[25.0608,121.5442],'松山機場':[25.0630,121.5519],'大直':[25.0796,121.5469],'劍南路':[25.0849,121.5556],'西湖':[25.0821,121.5672],'港墘':[25.0802,121.5751],'文德':[25.0785,121.5848],'內湖':[25.0837,121.5944],'大湖公園':[25.0838,121.6022],'葫洲':[25.0727,121.6073],'東湖':[25.0670,121.6116],'南港軟體園區':[25.0600,121.6158],'南港展覽館':[25.0553,121.6175],
+'頂埔':[24.9593,121.4192],'永寧':[24.9668,121.4363],'土城':[24.9731,121.4442],'海山':[24.9855,121.4487],'亞東醫院':[24.9984,121.4524],'府中':[25.0085,121.4593],'板橋':[25.0140,121.4624],'新埔':[25.0233,121.4682],'江子翠':[25.0300,121.4723],'龍山寺':[25.0353,121.4998],'西門':[25.0420,121.5082],'台北車站':[25.0463,121.5174],'善導寺':[25.0447,121.5232],'忠孝新生':[25.0423,121.5330],'忠孝敦化':[25.0414,121.5509],'國父紀念館':[25.0413,121.5579],'市政府':[25.0412,121.5653],'永春':[25.0408,121.5765],'後山埤':[25.0450,121.5826],'昆陽':[25.0504,121.5935],'南港':[25.0520,121.6070],
+'淡水':[25.1678,121.4455],'紅樹林':[25.1541,121.4589],'竹圍':[25.1369,121.4596],'關渡':[25.1255,121.4672],'忠義':[25.1309,121.4732],'復興崗':[25.1375,121.4853],'北投':[25.1320,121.4986],'奇岩':[25.1255,121.5011],'唭哩岸':[25.1207,121.5062],'石牌':[25.1144,121.5155],'明德':[25.1097,121.5189],'芝山':[25.1031,121.5225],'士林':[25.0935,121.5262],'劍潭':[25.0846,121.5251],'圓山':[25.0713,121.5199],'民權西路':[25.0628,121.5193],'雙連':[25.0577,121.5205],'中山':[25.0527,121.5204],'台大醫院':[25.0416,121.5163],'中正紀念堂':[25.0326,121.5183],'東門':[25.0337,121.5288],'大安森林公園':[25.0331,121.5354],'信義安和':[25.0332,121.5524],'台北101':[25.0329,121.5638],'象山':[25.0327,121.5703],
+'新店':[24.9578,121.5378],'新店區公所':[24.9673,121.5413],'七張':[24.9752,121.5430],'大坪林':[24.9827,121.5414],'景美':[24.9929,121.5409],'萬隆':[25.0021,121.5389],'公館':[25.0148,121.5343],'台電大樓':[25.0207,121.5282],'古亭':[25.0263,121.5229],'小南門':[25.0355,121.5110],'北門':[25.0494,121.5103],'松江南京':[25.0521,121.5329],'台北小巨蛋':[25.0516,121.5517],'南京三民':[25.0515,121.5640],'松山':[25.0500,121.5778],
+'南勢角':[24.9902,121.5094],'景安':[24.9938,121.5050],'永安市場':[25.0028,121.5113],'頂溪':[25.0138,121.5157],'行天宮':[25.0597,121.5333],'中山國小':[25.0627,121.5265],'大橋頭':[25.0634,121.5126],'台北橋':[25.0632,121.5002],'菜寮':[25.0601,121.4911],'三重':[25.0556,121.4847],'先嗇宮':[25.0464,121.4719],'頭前庄':[25.0400,121.4614],'新莊':[25.0361,121.4524],'輔大':[25.0329,121.4357],'丹鳳':[25.0287,121.4228],'迴龍':[25.0216,121.4116],'三重國小':[25.0705,121.4967],'三和國中':[25.0767,121.4864],'徐匯中學':[25.0806,121.4801],'三民高中':[25.0857,121.4729],'蘆洲':[25.0915,121.4645],
+'十四張':[24.9858,121.5283],'秀朗橋':[24.9905,121.5262],'景平':[24.9925,121.5161],'中和':[25.0003,121.4908],'橋和':[25.0045,121.4803],'中原':[25.0085,121.4733],'板新':[25.0144,121.4721],'新埔民生':[25.0264,121.4718],'幸福':[25.0503,121.4594],'新北產業園區':[25.0612,121.4600],
+'新莊副都心':[25.0598,121.4474],'泰山':[25.0507,121.4319],'泰山貴和':[25.0430,121.4110],'體育大學':[25.0355,121.3830],'長庚醫院':[25.0613,121.3683],'林口':[25.0710,121.3620],'山鼻':[25.0800,121.3070],'坑口':[25.0870,121.2640],'機場第一航廈':[25.0808,121.2382],'機場第二航廈':[25.0770,121.2330],'大園':[25.0600,121.2010],'橫山':[25.0480,121.2120],'領航':[25.0280,121.2130],'高鐵桃園站':[25.0130,121.2150],'桃園體育園區':[25.0005,121.2010],'興南':[24.9810,121.2070],'環北':[24.9680,121.2110],'老街溪':[24.9600,121.2210],
+'基隆':[25.1317,121.7400],'八堵':[25.1085,121.7290],'七堵':[25.0930,121.7140],'汐止':[25.0681,121.6620],'汐科':[25.0628,121.6476],'萬華':[25.0336,121.5000],'樹林':[24.9910,121.4245],'山佳':[24.9726,121.3925],'鶯歌':[24.9543,121.3547],'桃園':[24.9893,121.3133],'內壢':[24.9727,121.2582],'中壢':[24.9537,121.2257],'埔心':[24.9198,121.1835],'楊梅':[24.9146,121.1457],'富岡':[24.9343,121.0828],'湖口':[24.9029,121.0441],'新豐':[24.8696,120.9970],'竹北':[24.8392,121.0094],'新竹':[24.8016,120.9716],'瑞芳':[25.1088,121.8060],'高鐵新竹站':[24.8083,121.0402]
+};
+const S={};for(const k in SLL)S[k]=P(...SLL[k]);
+
+const LINES=[
+ {id:'TRA',name:'台鐵',color:'#3b4148',rate:1.0,dwell:0.6,wait:8,heavy:1,segs:[['基隆','八堵','七堵','汐止','汐科','南港','松山','台北車站','萬華','板橋','樹林','山佳','鶯歌','桃園','內壢','中壢','埔心','楊梅','富岡','湖口','新豐','竹北','新竹'],['八堵','瑞芳']]},
+ {id:'HSR',name:'高鐵',color:'#ee7c27',rate:0.35,dwell:2,wait:12,heavy:1,segs:[['南港','台北車站','板橋','高鐵桃園站','高鐵新竹站']]},
+ {id:'A',name:'機場捷運',color:'#8246af',rate:1.1,dwell:0.6,wait:8,heavy:1,segs:[['台北車站','三重','新北產業園區','新莊副都心','泰山','泰山貴和','體育大學','長庚醫院','林口','山鼻','坑口','機場第一航廈','機場第二航廈','大園','橫山','領航','高鐵桃園站','桃園體育園區','興南','環北','老街溪']]},
+ {id:'Y',name:'環狀線',color:'#d9b300',rate:1.6,dwell:0.6,wait:5,segs:[['大坪林','十四張','秀朗橋','景平','景安','中和','橋和','中原','板新','板橋','新埔民生','頭前庄','幸福','新北產業園區']]},
+ {id:'O',name:'中和新蘆線',color:'#f8b61c',rate:1.6,dwell:0.6,wait:4,segs:[['南勢角','景安','永安市場','頂溪','古亭','東門','忠孝新生','松江南京','行天宮','中山國小','民權西路','大橋頭','台北橋','菜寮','三重','先嗇宮','頭前庄','新莊','輔大','丹鳳','迴龍'],['大橋頭','三重國小','三和國中','徐匯中學','三民高中','蘆洲']]},
+ {id:'G',name:'松山新店線',color:'#008659',rate:1.6,dwell:0.6,wait:4,segs:[['新店','新店區公所','七張','大坪林','景美','萬隆','公館','台電大樓','古亭','中正紀念堂','小南門','西門','北門','中山','松江南京','南京復興','台北小巨蛋','南京三民','松山']]},
+ {id:'R',name:'淡水信義線',color:'#e3002c',rate:1.6,dwell:0.6,wait:3,segs:[['淡水','紅樹林','竹圍','關渡','忠義','復興崗','北投','奇岩','唭哩岸','石牌','明德','芝山','士林','劍潭','圓山','民權西路','雙連','中山','台北車站','台大醫院','中正紀念堂','東門','大安森林公園','大安','信義安和','台北101','象山']]},
+ {id:'BL',name:'板南線',color:'#0070bd',rate:1.6,dwell:0.6,wait:3,segs:[['頂埔','永寧','土城','海山','亞東醫院','府中','板橋','新埔','江子翠','龍山寺','西門','台北車站','善導寺','忠孝新生','忠孝復興','忠孝敦化','國父紀念館','市政府','永春','後山埤','昆陽','南港','南港展覽館']]},
+ {id:'BR',name:'文湖線',color:'#c48c31',rate:1.9,dwell:0.6,wait:3,segs:[['動物園','木柵','萬芳社區','萬芳醫院','辛亥','麟光','六張犁','科技大樓','大安','忠孝復興','南京復興','中山國中','松山機場','大直','劍南路','西湖','港墘','文德','內湖','大湖公園','葫洲','東湖','南港軟體園區','南港展覽館']]}
+];
+
+/* ---------- graph ---------- */
+const nodes=[],idx={};
+LINES.forEach(L=>L.segs.forEach(seg=>seg.forEach(s=>{const id=s+'|'+L.id;if(!(id in idx)){idx[id]=nodes.length;nodes.push({st:s,L,p:S[s]});}})));
+const radj=nodes.map(()=>[]);
+const edge=(v,u,c)=>radj[u].push({v,c});
+LINES.forEach(L=>L.segs.forEach(seg=>{for(let i=0;i<seg.length-1;i++){const a=idx[seg[i]+'|'+L.id],b=idx[seg[i+1]+'|'+L.id];const c=dist(S[seg[i]],S[seg[i+1]])*L.rate+L.dwell;edge(a,b,c);edge(b,a,c);}}));
+const bySt={};nodes.forEach((n,i)=>(bySt[n.st]=bySt[n.st]||[]).push(i));
+Object.values(bySt).forEach(arr=>{for(const v of arr)for(const u of arr){if(u===v)continue;const heavy=nodes[u].L.heavy||nodes[v].L.heavy;edge(v,u,(heavy?7:4)+nodes[u].L.wait);}});
+function solve(seeds){const n=nodes.length,D=new Float64Array(n).fill(Infinity),nx=new Int32Array(n).fill(-1),done=new Uint8Array(n);
+  seeds.forEach(([id,c])=>{D[idx[id]]=c;});
+  for(;;){let u=-1,b=Infinity;for(let i=0;i<n;i++)if(!done[i]&&D[i]<b){b=D[i];u=i;}if(u<0)break;done[u]=1;
+    for(const {v,c} of radj[u])if(D[u]+c<D[v]){D[v]=D[u]+c;nx[v]=u;}}
+  return {D,nx};}
+
+const NE={key:'N',name:'內湖廠',ll:[25.080863,121.564607],carPeak:1.7,color:'#c8102e'};
+const TC={key:'T',name:'土城廠',ll:[24.966258,121.421419],carPeak:1.45,color:'#1f5f99'};
+NE.short='內湖廠';TC.short='土城廠';
+NE.p=P(...NE.ll);TC.p=P(...TC.ll);
+NE.sol=solve([['西湖|BR',5],['港墘|BR',14],['劍南路|BR',13]]);
+TC.sol=solve([['頂埔|BL',13],['永寧|BL',20]]);
+[NE,TC].forEach(d=>{d.base=nodes.map((n,i)=>(d.sol.nx[i]<0?0:n.L.wait)+d.sol.D[i]);});
+const NX=nodes.map(n=>n.p[0]),NY=nodes.map(n=>n.p[1]);
+
+/* ---------- time models ---------- */
+function busRide(r){return Math.min(r,4)*3+Math.min(Math.max(r-4,0),11)*2+Math.max(r-15,0)*1.2;}
+function access(d){const r=Math.max(d*1.3,0.05);let best={t:Infinity,type:''};if(r<=2.2)best={t:r*13,type:'walk'};if(d<=30){const b=7+busRide(r);if(b<best.t)best={t:b,type:'bus'};}return best;}
+const BUSPK=1.35,RAILPK=1.1,SCOOTPK=1.25;
+function transit(p,dest,peak){let best={t:Infinity};
+  for(let i=0;i<nodes.length;i++){const bi=dest.base[i];if(!isFinite(bi))continue;const d=Math.hypot(p[0]-NX[i],p[1]-NY[i]);if(d>30)continue;
+    const a=access(d);const at=a.t*(peak&&a.type==='bus'?BUSPK:1);const t=at+bi*(peak?RAILPK:1);if(t<best.t)best={t,node:i,acc:a,at};}
+  const r=dist(p,dest.p)*1.3;
+  if(r<=2.2){const t=r*13;if(t<best.t)best={t,direct:'walk'};}
+  if(r<=12){const t=(7+busRide(r))*(peak?BUSPK:1);if(t<best.t)best={t,direct:'bus'};}
+  return best;}
+function transitFast(x,y,dest){let best=Infinity;const base=dest.base;
+  for(let i=0;i<base.length;i++){const bi=base[i];if(bi>=best)continue;const d=Math.hypot(x-NX[i],y-NY[i]);if(d>30)continue;
+    const r=Math.max(d*1.3,0.05);let a=(7+busRide(r))*BUSPK;if(r<=2.2)a=Math.min(a,r*13);const t=a+bi*RAILPK;if(t<best)best=t;}
+  const r=Math.hypot(x-dest.p[0],y-dest.p[1])*1.3;if(r<=2.2)best=Math.min(best,r*13);if(r<=12)best=Math.min(best,(7+busRide(r))*BUSPK);
+  return best;}
+function carModel(p,dest,peak){const r=Math.max(dist(p,dest.p)*1.3,0.5);const v=25+30*(1-Math.exp(-r/20));const t=(5+r/v*60)*1.15;return peak?t*dest.carPeak:t;}
+function scooterModel(r,peak,v=40){const t=3+r/v*60+r*0.5;return peak?t*SCOOTPK:t;}
+function fastT(m,x,y,dest){if(m==='transit')return transitFast(x,y,dest);const p=[x,y];if(m==='car')return carModel(p,dest,true);return scooterModel(Math.max(dist(p,dest.p)*1.3,0.5),true);}
+const ICON={transit:'<svg viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="14" rx="3"/><path d="M5 10h14M8.5 21l1.5-4M15.5 21l-1.5-4"/><circle cx="9" cy="13.5" r=".9"/><circle cx="15" cy="13.5" r=".9"/></svg>',car:'<svg viewBox="0 0 24 24"><path d="M3.5 16.5v-4.2l2.2-5.3h12.6l2.2 5.3v4.2z"/><path d="M3.5 12.3h17"/><circle cx="7.5" cy="16.8" r="1.9"/><circle cx="16.5" cy="16.8" r="1.9"/></svg>',scooter:'<svg viewBox="0 0 24 24"><circle cx="5.5" cy="17" r="2.6"/><circle cx="18.5" cy="17" r="2.6"/><path d="M8 17h6.5l2.3-8h-3M16.8 9l1.7 8M5.5 14.4l3-4.2h4.5"/></svg>'};
+const MODE_NAME={transit:'大眾運輸',car:'開車',scooter:'機車'};
+const r5=t=>isFinite(t)?Math.max(5,Math.round(t/5)*5):NaN;
+
+/* ---------- districts ---------- */
+const DIST=[
+['內湖',25.069,121.589,1],['南港',25.055,121.607,2],['信義',25.033,121.567,1],['松山',25.050,121.558,2],['大安',25.026,121.543,2],['中山',25.064,121.533,2],['中正',25.032,121.519,1],['萬華',25.035,121.499,2],['大同',25.063,121.513,2],['士林',25.093,121.525,1],['北投',25.132,121.501,1],['文山',24.989,121.570,1],
+['板橋',25.011,121.459,1],['中和',24.999,121.499,1],['永和',25.008,121.516,2],['新店',24.968,121.542,1],['土城',24.973,121.444,1],['樹林',24.991,121.420,2],['鶯歌',24.955,121.354,1],['三峽',24.934,121.369,2],['三重',25.062,121.488,1],['蘆洲',25.085,121.473,2],['新莊',25.036,121.450,1],['泰山',25.059,121.431,2],['五股',25.083,121.438,2],['林口',25.077,121.392,1],['汐止',25.063,121.640,1],['淡水',25.170,121.441,1],['八里',25.147,121.400,2],['深坑',25.002,121.616,2],['瑞芳',25.109,121.806,1],['基隆',25.128,121.740,1],
+['桃園',24.993,121.301,1],['中壢',24.965,121.225,1],['平鎮',24.946,121.218,2],['八德',24.954,121.293,2],['龜山',24.993,121.338,2],['蘆竹',25.047,121.292,2],['大園',25.064,121.196,1],['觀音',25.034,121.082,1],['楊梅',24.908,121.146,1],['龍潭',24.864,121.216,1],['大溪',24.880,121.287,1],['新屋',24.972,121.106,2],
+['湖口',24.904,121.044,1],['新豐',24.899,121.003,2],['竹北',24.839,121.004,1],['新竹市',24.804,120.968,1]
+].map(([n,la,lo,t])=>({n,ll:[la,lo],p:P(la,lo),t}));
+const PRESETS=['龍潭','中壢','楊梅','湖口','竹北','桃園','林口','板橋','中和','新店','三重','士林','汐止','淡水','基隆'];
+
+/* ---------- map ---------- */
+const map=L.map('map',{zoomControl:true,minZoom:9,maxZoom:18,maxBounds:[[24.3,120.4],[25.7,122.3]],attributionControl:true}).setView([25.0,121.38],10);
+map.getContainer().classList.add('crosshair');
+map.createPane('heatPane').style.zIndex=350;
+map.createPane('netPane').style.zIndex=420;
+map.createPane('routePane').style.zIndex=460;
+const BASES={
+  osm:L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP/default/GoogleMapsCompatible/{z}/{y}/{x}',{maxZoom:19,attribution:'© 內政部國土測繪中心'}),
+  light:L.tileLayer('https://wmts.nlsc.gov.tw/wmts/EMAP01/default/GoogleMapsCompatible/{z}/{y}/{x}',{maxZoom:19,attribution:'© 內政部國土測繪中心'}),
+  sat:L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19,attribution:'影像 © Esri'})
+};
+/* schematic base: sea + district labels */
+const COAST=[[24.76,120.90],[24.80,120.92],[24.85,120.96],[24.90,120.98],[24.95,121.01],[24.99,121.04],[25.04,121.06],[25.07,121.10],[25.10,121.18],[25.12,121.24],[25.125,121.30],[25.14,121.35],[25.16,121.39],[25.17,121.41],[25.19,121.43],[25.23,121.46],[25.26,121.49],[25.30,121.54],[25.29,121.57],[25.25,121.62],[25.23,121.64],[25.19,121.69],[25.16,121.73],[25.15,121.76],[25.15,121.79],[25.13,121.82],[25.12,121.86],[25.12,122.3],[25.7,122.3],[25.7,120.4],[24.3,120.4],[24.3,120.80]];
+const schema=L.layerGroup([L.polygon(COAST,{color:'#9fbfd3',weight:1.2,fillColor:'#cfe0ea',fillOpacity:1,interactive:false})]);
+const labHi=L.layerGroup(),labLo=L.layerGroup();
+DIST.forEach(d=>L.marker(d.ll,{interactive:false,icon:L.divIcon({className:'',html:`<div class="dlab ${d.t===2?'t2':''}">${d.n}</div>`,iconSize:[0,0]})}).addTo(d.t===1?labHi:labLo));
+schema.addLayer(labHi);
+/* offline schematic details: county borders, rivers, expressways */
+const SCH={
+ border:[
+  [[25.135,121.46],[25.17,121.50],[25.21,121.55],[25.20,121.60],[25.13,121.61],[25.10,121.65],[25.06,121.64],[25.03,121.63],[24.99,121.62],[24.97,121.60],[24.96,121.56],[24.98,121.54],[25.00,121.535],[25.01,121.52],[25.02,121.505],[25.04,121.49],[25.07,121.505],[25.10,121.47],[25.135,121.46]],
+  [[25.122,121.32],[25.07,121.36],[25.03,121.38],[24.99,121.37],[24.96,121.33],[24.93,121.32],[24.85,121.33],[24.76,121.40]],
+  [[25.16,121.72],[25.14,121.68],[25.10,121.68],[25.08,121.70],[25.09,121.76],[25.11,121.80],[25.13,121.82]],
+  [[24.935,121.005],[24.90,121.08],[24.85,121.15],[24.80,121.20],[24.76,121.27]],
+  [[24.86,120.955],[24.83,120.99],[24.80,121.02],[24.77,121.03]]
+ ],
+ rivers:[
+  [[25.17,121.41],[25.15,121.43],[25.125,121.46],[25.10,121.475],[25.075,121.495],[25.055,121.505],[25.035,121.495],[25.02,121.485],[25.00,121.465],[24.98,121.44],[24.95,121.40],[24.92,121.36],[24.88,121.30],[24.84,121.27]],
+  [[25.12,121.465],[25.10,121.50],[25.085,121.53],[25.078,121.555],[25.072,121.575],[25.066,121.595],[25.06,121.62],[25.063,121.65],[25.075,121.68],[25.09,121.71],[25.10,121.75]],
+  [[25.015,121.49],[24.995,121.53],[24.975,121.545],[24.955,121.56],[24.93,121.55],[24.89,121.55]],
+  [[24.84,121.0],[24.82,121.05],[24.80,121.10]]
+ ],
+ fwy:[
+  [[25.13,121.74],[25.10,121.71],[25.07,121.66],[25.07,121.62],[25.068,121.585],[25.075,121.53],[25.07,121.50],[25.06,121.47],[25.08,121.44],[25.06,121.39],[25.02,121.34],[25.00,121.29],[24.97,121.23],[24.93,121.17],[24.90,121.10],[24.87,121.04],[24.83,121.01],[24.79,120.99]],
+  [[25.13,121.71],[25.10,121.68],[25.07,121.66],[25.04,121.63],[25.00,121.62],[24.98,121.57],[24.96,121.52],[24.975,121.48],[24.97,121.43],[24.93,121.37],[24.88,121.28],[24.86,121.22],[24.80,121.17],[24.76,121.12]],
+  [[25.03,121.625],[24.98,121.66],[24.94,121.71],[24.88,121.78]],
+  [[25.07,121.23],[25.03,121.27],[25.00,121.29],[24.95,121.34]]
+ ],
+ exp:[
+  [[25.14,121.40],[25.10,121.43],[25.07,121.47],[25.03,121.46],[25.01,121.47],[25.00,121.49],[24.98,121.52],[24.97,121.54]],
+  [[25.08,121.44],[25.04,121.44],[25.00,121.44],[24.97,121.43]],
+  [[24.80,120.92],[24.90,120.985],[25.00,121.04],[25.06,121.10],[25.10,121.20]]
+ ],
+ county:[['臺北市',25.09,121.56],['新北市',24.92,121.55],['桃園市',24.93,121.24],['基隆市',25.115,121.74],['新竹縣',24.82,121.12],['新竹市',24.785,120.95]]
+};
+SCH.border.forEach(b=>schema.addLayer(L.polyline(b,{color:'#8a8f98',weight:1.6,dashArray:'6 4 1.5 4',opacity:.8,interactive:false})));
+SCH.rivers.forEach(r=>schema.addLayer(L.polyline(r,{color:'#8fb4cc',weight:3,opacity:.9,interactive:false})));
+SCH.exp.forEach(r=>{schema.addLayer(L.polyline(r,{color:'#fff',weight:6,interactive:false}));schema.addLayer(L.polyline(r,{color:'#f2c94c',weight:3.5,interactive:false}));});
+SCH.fwy.forEach(r=>{schema.addLayer(L.polyline(r,{color:'#fff',weight:7.5,interactive:false}));schema.addLayer(L.polyline(r,{color:'#e8963c',weight:4.5,interactive:false}));});
+SCH.county.forEach(([n,la,lo])=>schema.addLayer(L.marker([la,lo],{interactive:false,icon:L.divIcon({className:'',html:`<div class="clab">${n}</div>`,iconSize:[0,0]})})));
+const schLegend=L.control({position:'bottomright'});schLegend.onAdd=()=>{const d=L.DomUtil.create('div','slegend');d.innerHTML='<span><i style="background:#e8963c"></i>國道</span><span><i style="background:#f2c94c"></i>快速道路</span><span><i style="background:#8fb4cc"></i>河川</span><span><i class="bd"></i>縣市界</span><div>示意圖：線條為約略位置</div>';return d;};
+
+let baseKey='osm',tileOK=0,tileErr=0,fellBack=false;
+function setBase(k){Object.values(BASES).forEach(l=>map.removeLayer(l));map.removeLayer(schema);map.removeLayer(labLo);
+  baseKey=k;map.removeControl(schLegend);if(k==='schema'){schema.addTo(map);schLegend.addTo(map);if(map.getZoom()>=11)labLo.addTo(map);}else BASES[k].addTo(map);
+  document.querySelectorAll('#baseSeg button').forEach(b=>b.classList.toggle('on',b.dataset.b===k));}
+const NEXT={osm:'light',light:'sat',sat:'schema'};
+const okN={},errN={},failed={};
+function note(t){const n=$('#notice');n.hidden=false;n.textContent=t;clearTimeout(note.t);note.t=setTimeout(()=>n.hidden=true,7000);}
+const BLOCK_MSG='這個網頁環境無法載入線上地圖，只能用示意圖。想看街道圖、衛星圖，請下載 HTML 檔用瀏覽器開啟。';
+Object.entries(BASES).forEach(([k,l])=>{okN[k]=0;errN[k]=0;l.on('tileload',()=>{okN[k]++;});l.on('tileerror',()=>{errN[k]++;
+  if(!failed[k]&&okN[k]===0&&errN[k]>=4){failed[k]=true;const btn=document.querySelector(`#baseSeg button[data-b="${k}"]`);if(btn){btn.classList.add('off');btn.title='無法載入';}
+    if(baseKey===k){let nx=NEXT[k];while(nx!=='schema'&&failed[nx])nx=NEXT[nx];setBase(nx);if(nx==='schema')note(BLOCK_MSG);}}});});
+document.querySelectorAll('#baseSeg button').forEach(b=>b.onclick=()=>{const k=b.dataset.b;if(k!=='schema'&&failed[k]){note(BLOCK_MSG);return;}setBase(k);});
+map.on('zoomend',()=>{if(baseKey==='schema'){if(map.getZoom()>=11)labLo.addTo(map);else map.removeLayer(labLo);}stationVis();});
+setBase('osm');
+
+/* network overlay */
+const net=L.layerGroup(),stLayer=L.layerGroup();
+LINES.forEach(L2=>L2.segs.forEach(seg=>{const lls=seg.map(s=>SLL[s]);
+  if(L2.id==='TRA'){L.polyline(lls,{pane:'netPane',color:'#3b4148',weight:4,opacity:.75,interactive:false}).addTo(net);L.polyline(lls,{pane:'netPane',color:'#fff',weight:2,dashArray:'6 6',opacity:.9,interactive:false}).addTo(net);}
+  else L.polyline(lls,{pane:'netPane',color:L2.color,weight:L2.id==='HSR'?3:4,opacity:.8,interactive:false}).addTo(net);}));
+Object.keys(bySt).forEach(s=>{L.circleMarker(SLL[s],{pane:'netPane',radius:bySt[s].length>1?4.5:3,color:'#222',weight:1.2,fillColor:'#fff',fillOpacity:1}).bindTooltip(s+'站',{direction:'right'}).addTo(stLayer);});
+function stationVis(){if($('#showNet').checked&&map.getZoom()>=13)stLayer.addTo(map);else map.removeLayer(stLayer);}
+function netVis(){if($('#showNet').checked)net.addTo(map);else map.removeLayer(net);stationVis();}
+$('#showNet').onchange=netVis;netVis();
+
+/* destination markers */
+[NE,TC].forEach(d=>L.circleMarker(d.ll,{radius:9,color:'#fff',weight:3,fillColor:d.color,fillOpacity:1,pane:'routePane'}).bindTooltip(`<span class="mklab">${d.name}</span>`,{permanent:true,direction:'right',interactive:false}).addTo(map));
+
+/* ---------- heat overlay ---------- */
+const TSTOPS=[[15,[60,170,140]],[45,[150,200,95]],[70,[240,200,80]],[90,[240,140,60]],[120,[210,60,50]],[150,[120,20,40]]];
+const ISTOPS=[[-40,[40,110,190]],[0,[230,232,232]],[25,[240,200,90]],[50,[232,110,50]],[90,[130,20,40]]];
+function ramp(stops,v){if(!isFinite(v))return null;if(v<=stops[0][0])return stops[0][1];for(let i=1;i<stops.length;i++){if(v<=stops[i][0]){const [a,ca]=stops[i-1],[b,cb]=stops[i];const f=(v-a)/(b-a);return ca.map((c,k)=>Math.round(c+(cb[k]-c)*f));}}return stops[stops.length-1][1];}
+const CELL=0.3,COLS=Math.ceil(W/CELL),ROWS=Math.ceil(H/CELL);
+const cv=document.createElement('canvas');cv.width=COLS;cv.height=ROWS;
+let heatLayer=null;
+const legendCtl=L.control({position:'bottomleft'});legendCtl.onAdd=()=>{const d=L.DomUtil.create('div','hlegend');d.id='hleg';L.DomEvent.disableClickPropagation(d);return d;};
+const BANDS=[[30,[46,160,110],'30 分內'],[60,[150,205,90],'30–60 分'],[90,[240,190,50],'60–90 分'],[Infinity,[215,60,60],'90 分以上']];
+function band(v){if(!isFinite(v))return null;for(const b of BANDS)if(v<=b[0])return b[1];return null;}
+const LANDPOLY=COAST.slice(0,27).map(c=>P(c[0],c[1]));
+function drawHeat(){const type=$('#heat').value,m=$('#heatMode').value;
+  if(heatLayer){map.removeLayer(heatLayer);heatLayer=null;}map.removeControl(legendCtl);
+  if(type==='off')return;
+  const ctx=cv.getContext('2d');ctx.clearRect(0,0,COLS,ROWS);const img=ctx.createImageData(COLS,ROWS);
+  const bi=new Int8Array(COLS*ROWS).fill(-1);
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){const v=fastT(m,(c+.5)*CELL,(r+.5)*CELL,NE);if(!isFinite(v))continue;for(let k=0;k<BANDS.length;k++)if(v<=BANDS[k][0]){bi[r*COLS+c]=k;break;}}
+  for(let r=0;r<ROWS;r++)for(let c=0;c<COLS;c++){const i=r*COLS+c,k=bi[i];if(k<0)continue;const col=BANDS[k][1],o=i*4;
+    const edge=(c+1<COLS&&bi[i+1]!==k)||(c>0&&bi[i-1]!==k)||(r+1<ROWS&&bi[i+COLS]!==k)||(r>0&&bi[i-COLS]!==k);
+    img.data[o]=edge?Math.round(col[0]*.7):col[0];img.data[o+1]=edge?Math.round(col[1]*.7):col[1];img.data[o+2]=edge?Math.round(col[2]*.7):col[2];const fe=Math.min(1,Math.min(c,r,COLS-1-c,ROWS-1-r)/12);img.data[o+3]=Math.round((edge?210:95)*fe);}
+  ctx.putImageData(img,0,0);
+  ctx.save();ctx.globalCompositeOperation='destination-out';ctx.beginPath();
+  const sc=1/CELL;LANDPOLY.forEach((p,i)=>i?ctx.lineTo(p[0]*sc,p[1]*sc):ctx.moveTo(p[0]*sc,p[1]*sc));
+  ctx.lineTo(COLS+5,LANDPOLY[LANDPOLY.length-1][1]*sc);ctx.lineTo(COLS+5,-5);ctx.lineTo(-5,-5);ctx.lineTo(-5,ROWS+5);ctx.closePath();ctx.fill();ctx.restore();
+  heatLayer=L.imageOverlay(cv.toDataURL(),[[B.lat0,B.lon0],[B.lat1,B.lon1]],{pane:'heatPane',opacity:1,interactive:false}).addTo(map);
+  legendCtl.addTo(map);
+  $('#hleg').innerHTML=`<b>到內湖廠單程（${MODE_NAME[m]}・尖峰）</b><div class="bands">${BANDS.map(b=>`<span><i style="background:rgb(${b[1]})"></i>${b[2]}</span>`).join('')}</div><div class="hnote">紅色＝單程超過 90 分（補助時間門檻）</div>`;}
+$('#heat').onchange=drawHeat;$('#heatMode').onchange=drawHeat;
+
+/* ---------- selection ---------- */
+const HOME_SVG='<svg xmlns="http://www.w3.org/2000/svg" width="40" height="52" viewBox="0 0 40 52"><ellipse cx="20" cy="49" rx="7" ry="2.5" fill="rgba(0,0,0,.28)"/><path d="M20 48C20 48 37 30.5 37 19A17 17 0 0 0 3 19C3 30.5 20 48 20 48Z" fill="#0f8a5f" stroke="#fff" stroke-width="2.5"/><circle cx="20" cy="14.5" r="4.6" fill="#fff"/><path d="M11.5 29.5c0-5.2 3.8-8.6 8.5-8.6s8.5 3.4 8.5 8.6z" fill="#fff"/></svg>';
+const pickMk=L.marker([0,0],{icon:L.divIcon({className:'homepin',html:HOME_SVG+'<span>住家</span>',iconSize:[40,52],iconAnchor:[20,49]}),zIndexOffset:1000,keyboard:false,interactive:false});
+const routeLayer=L.layerGroup();
+let pick=null,routeDest='N',osrm={},seq=0;
+function nearestName(p){let b=null,bd=Infinity;DIST.forEach(d=>{const k=dist(p,d.p);if(k<bd){bd=k;b=d;}});const nm=b.n.endsWith('市')?b.n:b.n+'區';return bd<3?nm:nm+'附近';}
+map.on('click',e=>select([e.latlng.lat,e.latlng.lng]));
+function select(ll,name,pan){pick={ll,p:P(...ll),name:name||nearestName(P(...ll))};
+  pickMk.setLatLng(ll).addTo(map);
+  document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',!!name&&name.startsWith(c.dataset.n)));
+  if(pan)map.flyToBounds(L.latLngBounds([ll,NE.ll,TC.ll]).pad(0.15),{duration:.6});
+  osrm={};const my=++seq;render();fetchRoads(my);}
+
+async function fetchRoad(dest){const [la,lo]=pick.ll;const url=`https://router.project-osrm.org/route/v1/driving/${lo},${la};${dest.ll[1]},${dest.ll[0]}?overview=full&geometries=geojson`;
+  const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),7000);
+  try{const r=await fetch(url,{signal:ctl.signal});clearTimeout(t);if(!r.ok)return null;const j=await r.json();if(!j.routes||!j.routes[0])return null;
+    const rt=j.routes[0];return {km:rt.distance/1000,min:rt.duration/60,geom:rt.geometry.coordinates.map(c=>[c[1],c[0]])};}catch(e){clearTimeout(t);return null;}}
+async function fetchRoads(my){const [n,t]=await Promise.all([fetchRoad(NE),fetchRoad(TC)]);if(my!==seq)return;osrm={N:n,T:t,done:true};render();}
+
+function carT(dest,peak){const o=osrm[dest.key];if(o){const t=o.min*1.4+5;return peak?t*dest.carPeak:t;}return carModel(pick.p,dest,peak);}
+function scooterT(dest,peak,v=40){const o=osrm[dest.key];const r=o?o.km:Math.max(dist(pick.p,dest.p)*1.3,0.5);return scooterModel(r,peak,v);}
+function kmOf(m,dest){if(m!=='transit'){const o=osrm[dest.key];return o?o.km:Math.max(dist(pick.p,dest.p)*1.3,0.5);}
+  const ss=steps(transit(pick.p,dest,true),dest);if(!ss.length)return NaN;let km=0;
+  ss.forEach(s=>{if(s.kind==='walk'||s.kind==='bus')km+=dist(pick.p,dest.p)*1.3;if(s.kind==='access')km+=dist(pick.p,S[s.to])*1.3;if(s.kind==='egress')km+=dist(S[s.from],dest.p)*1.3;if(s.kind==='ride')for(let i=1;i<s.chain.length;i++)km+=dist(S[s.chain[i-1]],S[s.chain[i]])*1.1;});return km;}
+const k1=v=>isFinite(v)?(Math.round(v*10)/10).toFixed(1):'—';
+function timeOf(m,dest,peak){return m==='car'?carT(dest,peak):m==='scooter'?scooterT(dest,peak):transit(pick.p,dest,peak).t;}
+
+/* transit steps with station chains */
+function steps(res,dest){if(!isFinite(res.t))return [];
+  if(res.direct)return [{kind:res.direct,c:'#6b7280',txt:res.direct==='walk'?`步行到${dest.short}`:`公車直達${dest.short}`,t:res.t}];
+  const out=[];const a=res.acc;const accKm=dist(pick.p,nodes[res.node].p)*1.3;out.push({kind:'access',c:'#6b7280',txt:(a.type==='walk'?'步行':'搭公車')+`到${nodes[res.node].st}站（約 ${accKm.toFixed(1)} 公里）`,t:res.at,to:nodes[res.node].st});
+  const D=dest.sol.D,nx=dest.sol.nx;let cur=res.node,segS=cur,w=nx[cur]<0?0:nodes[cur].L.wait,chain=[nodes[cur].st];
+  for(let g=0;g<300;g++){const j=nx[cur];
+    if(j<0||nodes[j].L.id!==nodes[cur].L.id){const Lc=nodes[cur].L;if(chain.length>1)out.push({kind:'ride',c:Lc.color,line:Lc.name,txt:`${Lc.name}　${nodes[segS].st} → ${nodes[cur].st}`,t:(D[segS]-D[cur]+w)*RAILPK,chain});
+      if(j<0){out.push({kind:'egress',c:'#6b7280',txt:`出站步行到${dest.short}`,t:D[cur]*RAILPK,from:nodes[cur].st});break;}
+      out.push({kind:'xfer',c:'#c3cad1',txt:`${nodes[cur].st}站 轉乘（含候車）`,t:(D[cur]-D[j])*RAILPK});segS=j;w=0;cur=j;chain=[nodes[cur].st];continue;}
+    cur=j;chain.push(nodes[cur].st);}
+  return out;}
+
+function drawRoute(){routeLayer.clearLayers();if(!pick)return;const dest=routeDest==='N'?NE:TC;
+  const o=osrm[dest.key];
+  L.polyline(o?o.geom:[pick.ll,dest.ll],{pane:'routePane',color:'#6b7280',weight:4,opacity:.7,dashArray:'7 7',interactive:false}).addTo(routeLayer);
+  const ss=steps(transit(pick.p,dest,true),dest);
+  ss.forEach(s=>{const dash={pane:'routePane',color:'#18212b',weight:3,dashArray:'2 6',opacity:.8,interactive:false};
+    if(s.kind==='walk'||s.kind==='bus')L.polyline([pick.ll,dest.ll],dash).addTo(routeLayer);
+    if(s.kind==='access')L.polyline([pick.ll,SLL[s.to]],dash).addTo(routeLayer);
+    if(s.kind==='egress')L.polyline([SLL[s.from],dest.ll],dash).addTo(routeLayer);
+    if(s.kind==='ride'){const lls=s.chain.map(n=>SLL[n]);L.polyline(lls,{pane:'routePane',color:'#fff',weight:10,opacity:.95,interactive:false}).addTo(routeLayer);L.polyline(lls,{pane:'routePane',color:s.c,weight:6,interactive:false}).addTo(routeLayer);}});
+  $('#gmLink').href=`https://www.google.com/maps/dir/?api=1&origin=${pick.ll[0].toFixed(6)},${pick.ll[1].toFixed(6)}&destination=${dest.ll[0]},${dest.ll[1]}&travelmode=transit`;
+  $('#gmLink').textContent=`在 Google 地圖查到${dest.short}的實際公車路線 ↗`;
+  $('#route').innerHTML=ss.length?ss.map(x=>`<li><i style="background:${x.c}"></i><span>${x.txt}</span><span class="t">${Math.round(x.t)} 分</span></li>`).join(''):'<li><i></i><span>這裡附近沒有合適的大眾運輸</span><span></span></li>';}
+
+let last=null;
+function render(){if(!pick)return;const ll=pick.ll;
+  $('#pName').textContent=pick.name;
+  $('#pMeta').innerHTML=`<span class="num">${ll[0].toFixed(4)}, ${ll[1].toFixed(4)}</span> · 距內湖廠直線 <span class="num">${dist(pick.p,NE.p).toFixed(1)}</span> km · 距土城廠 <span class="num">${dist(pick.p,TC.p).toFixed(1)}</span> km`;
+  const res={};['transit','car','scooter'].forEach(m=>{res[m]={Np:r5(timeOf(m,NE,true)),No:r5(timeOf(m,NE,false)),Tp:r5(timeOf(m,TC,true)),To:r5(timeOf(m,TC,false)),Nk:kmOf(m,NE),Tk:kmOf(m,TC)};});
+  {const rg=(d,pk)=>{const a=r5(scooterT(d,pk,45)),b=r5(scooterT(d,pk,35));return a===b?String(a):a+'–'+b;};Object.assign(res.scooter,{NpR:rg(NE,true),NoR:rg(NE,false),TpR:rg(TC,true),ToR:rg(TC,false)});}
+  last=res;
+  const f=v=>isFinite(v)?v:'—';
+  const plantKm=dist(TC.p,NE.p)*1.3;
+  const subOf=r=>{const c1=plantKm>=30&&r.Nk>=30;const c2=(r.Np-r.Tp)>50&&r.Np>90;return {ok:c1||c2,c1,c2,txt:c1&&c2?'條件 1、2':c1?'條件 1':c2?'條件 2':''};};
+  ['transit','car','scooter'].forEach(m=>{res[m].sub=subOf(res[m]);});
+  const sg=v=>isFinite(v)?(v>0?'+':v<0?'−':'')+Math.abs(v):'—';
+  $('#tbody').innerHTML=['transit','car','scooter'].map(m=>{const r=res[m],d=r.Np-r.Tp,dk=Math.round((r.Nk-r.Tk)*10)/10;
+    const chk=(ok,t)=>`<span class="${ok?'ck2 y':'ck2 n'}">${ok?'✓':'✕'} ${t}</span>`;
+    return `<tr><td><span class="md"><span class="ic">${ICON[m]}</span>${MODE_NAME[m]}</span></td><td><b>${k1(r.Tk)}<span class="sl">/</span>${r.TpR||f(r.Tp)}</b><small>離峰 ${r.ToR||f(r.To)} 分</small></td><td><b>${k1(r.Nk)}<span class="sl">/</span>${r.NpR||f(r.Np)}</b><small>離峰 ${r.NoR||f(r.No)} 分</small></td><td class="num ${d>0?'up':d<0?'down':''}"><b>${isFinite(dk)?sg(dk.toFixed(1)*1):'—'}<span class="sl">/</span>${sg(d)}</b><small>${d>0?'內湖較久':d<0?'內湖較快':'差不多'}</small></td><td><span class="sub ${r.sub.ok?'y':'n'}">${r.sub.ok?'符合':'不符合'}</span><div class="cond">${chk(r.sub.c1,'兩廠 '+plantKm.toFixed(0)+' km')}${chk(d>50,'多 '+d+' 分')}${chk(r.Np>90,'單程 '+r.Np+' 分')}</div></td></tr>`;}).join('');
+  $('#plantKm').textContent=plantKm.toFixed(0);
+  $('#src').textContent=(osrm.done?(osrm.N&&osrm.T?`開車、機車依實際道路路線（到內湖 ${osrm.N.km.toFixed(1)} km、到土城 ${osrm.T.km.toFixed(1)} km）`:'開車、機車無法連上路線服務，改用直線距離估算'):'開車、機車正在查詢實際道路路線…')+'；大眾運輸依搭乘路線計算。';
+  drawRoute();}
+document.querySelectorAll('#destTabs button').forEach(b=>b.onclick=()=>{routeDest=b.dataset.d;document.querySelectorAll('#destTabs button').forEach(x=>x.classList.toggle('on',x===b));drawRoute();});
+
+/* presets & search */
+const pre=$('#presets');PRESETS.forEach(n=>{const d=DIST.find(x=>x.n===n);const b=document.createElement('button');b.className='chip';b.textContent=n;b.dataset.n=n;b.onclick=()=>select(d.ll,n.endsWith('市')?n:n+'區',true);pre.appendChild(b);});
+async function geocode(q){
+  const inBox=(la,lo)=>la>24.3&&la<25.7&&lo>120.4&&lo<122.3;
+  const tries=[
+    async(sig)=>{const u='https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates?f=json&maxLocations=5&countryCode=TWN&location=121.45,25.02&outFields=Match_addr,PlaceName&SingleLine='+encodeURIComponent(q);
+      const r=await fetch(u,{signal:sig});const j=await r.json();const c=(j.candidates||[]).find(c=>c.score>=75&&inBox(c.location.y,c.location.x));return c?{ll:[c.location.y,c.location.x],label:c.attributes&&c.attributes.Match_addr||q}:null;},
+    async(sig)=>{const u='https://nominatim.openstreetmap.org/search?format=json&limit=5&countrycodes=tw&accept-language=zh-TW&viewbox=120.90,25.32,121.86,24.76&bounded=0&q='+encodeURIComponent(q);
+      const r=await fetch(u,{signal:sig});const j=await r.json();const c=(j||[]).find(c=>inBox(+c.lat,+c.lon));return c?{ll:[+c.lat,+c.lon],label:q}:null;}
+  ];
+  for(const t of tries){try{const ctl=new AbortController();const tm=setTimeout(()=>ctl.abort(),8000);const res=await t(ctl.signal);clearTimeout(tm);if(res)return res;}catch(e){}}
+  return null;}
+$('#addrForm').addEventListener('submit',async e=>{e.preventDefault();const q=$('#search').value.trim();const msg=$('#addrMsg');if(!q)return;
+  msg.className='addr-msg';msg.textContent='查詢中…';$('#addrBtn').disabled=true;
+  const g=await geocode(q);$('#addrBtn').disabled=false;
+  if(g){select(g.ll,q,true);msg.textContent='';return;}
+  const k=q.replace(/^(台|臺)?(北|桃園|新竹|基隆)?[市縣]?/,'').replace(/[區市鎮鄉].*$/,'');const d=DIST.find(x=>k&&(x.n===k||x.n.startsWith(k)));
+  if(d){select(d.ll,d.n.endsWith('市')?d.n:d.n+'區',true);msg.className='addr-msg err';msg.textContent='找不到精確地址，先定位到'+d.n+'。也可以直接在地圖上點選。';return;}
+  msg.className='addr-msg err';msg.textContent='找不到，請寫完整一點（例如加上縣市、區，或地點全名），或直接在地圖上點選。';});
+
+/* copy */
+$('#copy').addEventListener('click',async()=>{if(!last)return;const ll=pick.ll;
+  const lines=[`【通勤試算】${pick.name}（${ll[0].toFixed(4)}, ${ll[1].toFixed(4)}）`];
+  ['transit','car','scooter'].forEach(m=>{const r=last[m],d=r.Np-r.Tp;lines.push(`${MODE_NAME[m]}（尖峰）：土城廠 ${k1(r.Tk)} 公里／${r.Tp} 分；內湖廠 ${k1(r.Nk)} 公里／${r.Np} 分（時間 ${d>=0?'+':''}${d} 分）→ 補助檢核：${r.sub.ok?'符合'+r.sub.txt:'不符'}`);});
+  lines.push('※ 約略值，實際依個人路線與當日路況');const txt=lines.join('\n');const btn=$('#copy');
+  try{await navigator.clipboard.writeText(txt);btn.textContent='已複製';}catch(err){const ta=document.createElement('textarea');ta.value=txt;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');btn.textContent='已複製';}catch(e2){btn.textContent='請手動複製';}ta.remove();}
+  setTimeout(()=>btn.textContent='複製試算結果',1800);});
+
+/* init: start with an example point */
+const lt=DIST.find(d=>d.n==='龍潭');select(lt.ll,'龍潭區',false);
+setTimeout(()=>map.invalidateSize(),200);
+})();
+</script>
