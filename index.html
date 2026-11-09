@@ -307,7 +307,7 @@ const S={};for(const k in SLL)S[k]=P(...SLL[k]);
 const LINES=[
  {id:'TRA',name:'台鐵',color:'#3b4148',rate:1.0,dwell:0.6,wait:8,heavy:1,segs:[['基隆','八堵','七堵','汐止','汐科','南港','松山','台北車站','萬華','板橋','樹林','山佳','鶯歌','桃園','內壢','中壢','埔心','楊梅','富岡','湖口','新豐','竹北','新竹'],['八堵','瑞芳']]},
  {id:'HSR',name:'高鐵',color:'#ee7c27',rate:0.35,dwell:2,wait:12,heavy:1,segs:[['南港','台北車站','板橋','高鐵桃園站','高鐵新竹站']]},
- {id:'A',name:'機場捷運',color:'#8246af',rate:1.1,dwell:0.6,wait:8,heavy:1,segs:[['台北車站','三重','新北產業園區','新莊副都心','泰山','泰山貴和','體育大學','長庚醫院','林口','山鼻','坑口','機場第一航廈','機場第二航廈','大園','橫山','領航','高鐵桃園站','桃園體育園區','興南','環北','老街溪']]},
+ {id:'A',name:'機場捷運',color:'#8246af',rate:1.3,dwell:0.6,wait:8,heavy:1,segs:[['台北車站','三重','新北產業園區','新莊副都心','泰山','泰山貴和','體育大學','長庚醫院','林口','山鼻','坑口','機場第一航廈','機場第二航廈','大園','橫山','領航','高鐵桃園站','桃園體育園區','興南','環北','老街溪']]},
  {id:'Y',name:'環狀線',color:'#d9b300',rate:1.6,dwell:0.6,wait:5,segs:[['大坪林','十四張','秀朗橋','景平','景安','中和','橋和','中原','板新','板橋','新埔民生','頭前庄','幸福','新北產業園區']]},
  {id:'O',name:'中和新蘆線',color:'#f8b61c',rate:1.6,dwell:0.6,wait:4,segs:[['南勢角','景安','永安市場','頂溪','古亭','東門','忠孝新生','松江南京','行天宮','中山國小','民權西路','大橋頭','台北橋','菜寮','三重','先嗇宮','頭前庄','新莊','輔大','丹鳳','迴龍'],['大橋頭','三重國小','三和國中','徐匯中學','三民高中','蘆洲']]},
  {id:'G',name:'松山新店線',color:'#008659',rate:1.6,dwell:0.6,wait:4,segs:[['新店','新店區公所','七張','大坪林','景美','萬隆','公館','台電大樓','古亭','中正紀念堂','小南門','西門','北門','中山','松江南京','南京復興','台北小巨蛋','南京三民','松山']]},
@@ -323,7 +323,7 @@ const radj=nodes.map(()=>[]);
 const edge=(v,u,c)=>radj[u].push({v,c});
 LINES.forEach(L=>L.segs.forEach(seg=>{for(let i=0;i<seg.length-1;i++){const a=idx[seg[i]+'|'+L.id],b=idx[seg[i+1]+'|'+L.id];const c=dist(S[seg[i]],S[seg[i+1]])*L.rate+L.dwell;edge(a,b,c);edge(b,a,c);}}));
 const bySt={};nodes.forEach((n,i)=>(bySt[n.st]=bySt[n.st]||[]).push(i));
-Object.values(bySt).forEach(arr=>{for(const v of arr)for(const u of arr){if(u===v)continue;const heavy=nodes[u].L.heavy||nodes[v].L.heavy;edge(v,u,(heavy?7:4)+nodes[u].L.wait);}});
+Object.values(bySt).forEach(arr=>{for(const v of arr)for(const u of arr){if(u===v)continue;const heavy=nodes[u].L.heavy||nodes[v].L.heavy;const air=nodes[u].L.id==='A'||nodes[v].L.id==='A';edge(v,u,(air?9:heavy?7:4)+nodes[u].L.wait);}});
 function solve(seeds){const n=nodes.length,D=new Float64Array(n).fill(Infinity),nx=new Int32Array(n).fill(-1),done=new Uint8Array(n);
   seeds.forEach(([id,c])=>{D[idx[id]]=c;});
   for(;;){let u=-1,b=Infinity;for(let i=0;i<n;i++)if(!done[i]&&D[i]<b){b=D[i];u=i;}if(u<0)break;done[u]=1;
@@ -342,18 +342,19 @@ const NX=nodes.map(n=>n.p[0]),NY=nodes.map(n=>n.p[1]);
 /* ---------- time models ---------- */
 function busRide(r){return Math.min(r,4)*3+Math.min(Math.max(r-4,0),11)*2+Math.max(r-15,0)*1.2;}
 function access(d){const r=Math.max(d*1.3,0.05);let best={t:Infinity,type:''};if(r<=2.2)best={t:r*13,type:'walk'};if(d<=30){const b=7+busRide(r);if(b<best.t)best={t:b,type:'bus'};}return best;}
-const BUSPK=1.35,RAILPK=1.1,SCOOTPK=1.25;
-function transit(p,dest,peak){let best={t:Infinity};
-  for(let i=0;i<nodes.length;i++){const bi=dest.base[i];if(!isFinite(bi))continue;const d=Math.hypot(p[0]-NX[i],p[1]-NY[i]);if(d>30)continue;
+const BUSPK=1.25,RAILPK=1.05,SCOOTPK=1.25;
+function accR(x,y){let m=Infinity;for(let i=0;i<NX.length;i++){const d=Math.hypot(x-NX[i],y-NY[i]);if(d<m)m=d;}return m>6?30:Math.max(8,m+4);}
+function transit(p,dest,peak){let best={t:Infinity};const R=accR(p[0],p[1]);
+  for(let i=0;i<nodes.length;i++){const bi=dest.base[i];if(!isFinite(bi))continue;const d=Math.hypot(p[0]-NX[i],p[1]-NY[i]);if(d>R)continue;
     const a=access(d);const at=a.t*(peak&&a.type==='bus'?BUSPK:1);const t=at+bi*(peak?RAILPK:1);if(t<best.t)best={t,node:i,acc:a,at};}
   const r=dist(p,dest.p)*1.3;
   if(r<=2.2){const t=r*13;if(t<best.t)best={t,direct:'walk'};}
-  if(r<=12){const t=(7+busRide(r))*(peak?BUSPK:1);if(t<best.t)best={t,direct:'bus'};}
+  if(r<=10){const t=(7+busRide(r))*(peak?BUSPK:1);if(t<best.t)best={t,direct:'bus'};}
   return best;}
-function transitFast(x,y,dest){let best=Infinity;const base=dest.base;
-  for(let i=0;i<base.length;i++){const bi=base[i];if(bi>=best)continue;const d=Math.hypot(x-NX[i],y-NY[i]);if(d>30)continue;
+function transitFast(x,y,dest){let best=Infinity;const base=dest.base;const R=accR(x,y);
+  for(let i=0;i<base.length;i++){const bi=base[i];if(bi>=best)continue;const d=Math.hypot(x-NX[i],y-NY[i]);if(d>R)continue;
     const r=Math.max(d*1.3,0.05);let a=(7+busRide(r))*BUSPK;if(r<=2.2)a=Math.min(a,r*13);const t=a+bi*RAILPK;if(t<best)best=t;}
-  const r=Math.hypot(x-dest.p[0],y-dest.p[1])*1.3;if(r<=2.2)best=Math.min(best,r*13);if(r<=12)best=Math.min(best,(7+busRide(r))*BUSPK);
+  const r=Math.hypot(x-dest.p[0],y-dest.p[1])*1.3;if(r<=2.2)best=Math.min(best,r*13);if(r<=10)best=Math.min(best,(7+busRide(r))*BUSPK);
   return best;}
 function carModel(p,dest,peak){const r=Math.max(dist(p,dest.p)*1.3,0.5);const v=25+30*(1-Math.exp(-r/20));const t=(5+r/v*60)*1.15;return peak?t*dest.carPeak:t;}
 function scooterModel(r,peak,v=40){const t=3+r/v*60+r*0.5;return peak?t*SCOOTPK:t;}
