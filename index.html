@@ -123,7 +123,10 @@ td .md{font-weight:700}
 .peaknote b{color:var(--ink)}
 .pn-h{font-size:13px;font-weight:700;color:var(--ink);letter-spacing:.06em;cursor:pointer}
 .peaknote[open] .pn-h{margin-bottom:4px}
-.tabs{display:flex;gap:2px;background:var(--chip);border-radius:9px;padding:3px;margin-bottom:10px}
+.tabs{display:flex;gap:2px;background:var(--chip);border-radius:9px;padding:3px;margin-bottom:8px}
+#modeTabs{background:transparent;padding:0;gap:6px}
+#modeTabs button{border:1px solid var(--line);background:var(--surface)}
+#modeTabs button.on{background:var(--brand);color:#fff;border-color:var(--brand);box-shadow:none}
 .tabs button{flex:1;font:inherit;font-size:13px;border:0;background:transparent;color:var(--ink);padding:6px;border-radius:7px;cursor:pointer}
 .tabs button.on{background:var(--surface);font-weight:700;box-shadow:0 1px 2px rgba(0,0,0,.18)}
 ol.route{list-style:none;margin:0;padding:0;display:grid;gap:6px}
@@ -255,11 +258,12 @@ details.method ul{margin:8px 0 0;padding-left:1.2em;display:grid;gap:4px;max-wid
         </details>
       </div>
       <div>
-        <h3>大眾運輸路線（尖峰）</h3>
+        <h3>路線</h3>
+        <div class="tabs" id="modeTabs"><button data-m="transit" class="on">大眾運輸</button><button data-m="car">開車</button><button data-m="scooter">機車</button></div>
         <div class="tabs" id="destTabs"><button data-d="N" class="on">到內湖廠</button><button data-d="T">到土城廠</button></div>
         <ol class="route" id="route"></ol>
         <a class="gm" id="gmLink" href="https://www.google.com/maps" target="_blank" rel="noopener">在 Google 地圖查實際公車路線與班次 ↗</a>
-        <p class="gm-note">公車路線號（如 205、中山幹線）需即時公車資料，請用上方連結查看。</p>
+        <p class="gm-note" id="gmNote">公車路線號（如 205、中山幹線）需即時公車資料，請用上方連結查看。</p>
       </div>
       <button class="copy" id="copy">複製試算結果</button>
     </aside>
@@ -488,21 +492,29 @@ const routeLayer=L.layerGroup();
 let pick=null,routeDest='N',osrm={},seq=0;
 function nearestName(p){let b=null,bd=Infinity;DIST.forEach(d=>{const k=dist(p,d.p);if(k<bd){bd=k;b=d;}});const nm=b.n.endsWith('市')?b.n:b.n+'區';return bd<3?nm:nm+'附近';}
 map.on('click',e=>select([e.latlng.lat,e.latlng.lng]));
-function select(ll,name,pan){pick={ll,p:P(...ll),name:name||nearestName(P(...ll))};
+function inPoly(pt,poly){let c=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const a=poly[i],b=poly[j];if(((a[0]>pt[0])!==(b[0]>pt[0]))&&(pt[1]<(b[1]-a[1])*(pt[0]-a[0])/(b[0]-a[0])+a[1]))c=!c;}return c;}
+function select(ll,name,pan){
+  if(ll[0]<B.lat0||ll[0]>B.lat1||ll[1]<B.lon0||ll[1]>B.lon1){note('這裡超出試算範圍（新竹到基隆一帶），請點選範圍內的住家位置。');return;}
+  if(inPoly(ll,COAST)){note('這裡是海上，請點選陸地上的住家位置。');return;}
+  pick={ll,p:P(...ll),name:name||nearestName(P(...ll))};
   pickMk.setLatLng(ll).addTo(map);
   document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',!!name&&name.startsWith(c.dataset.n)));
   if(pan)map.flyToBounds(L.latLngBounds([ll,NE.ll,TC.ll]).pad(0.15),{duration:.6});
   osrm={};const my=++seq;render();fetchRoads(my);}
 
-async function fetchRoad(dest){const [la,lo]=pick.ll;const url=`https://router.project-osrm.org/route/v1/driving/${lo},${la};${dest.ll[1]},${dest.ll[0]}?overview=full&geometries=geojson`;
+async function fetchRoad(dest,noFwy){const [la,lo]=pick.ll;const url=`https://router.project-osrm.org/route/v1/driving/${lo},${la};${dest.ll[1]},${dest.ll[0]}?overview=full&geometries=geojson&steps=true${noFwy?'&exclude=motorway':''}`;
   const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),7000);
   try{const r=await fetch(url,{signal:ctl.signal});clearTimeout(t);if(!r.ok)return null;const j=await r.json();if(!j.routes||!j.routes[0])return null;
-    const rt=j.routes[0];return {km:rt.distance/1000,min:rt.duration/60,geom:rt.geometry.coordinates.map(c=>[c[1],c[0]])};}catch(e){clearTimeout(t);return null;}}
-async function fetchRoads(my){const [n,t]=await Promise.all([fetchRoad(NE),fetchRoad(TC)]);if(my!==seq)return;osrm={N:n,T:t,done:true};render();}
+    const rt=j.routes[0];const snap=(j.waypoints&&j.waypoints[0]&&j.waypoints[0].distance)||0;
+    const st=(rt.legs&&rt.legs[0]&&rt.legs[0].steps||[]).map(x=>({name:x.name||'',ref:x.ref||'',km:x.distance/1000}));
+    return {km:rt.distance/1000,min:rt.duration/60,geom:rt.geometry.coordinates.map(c=>[c[1],c[0]]),snap,steps:st};}catch(e){clearTimeout(t);return null;}}
+async function fetchRoads(my){const [n,t,sn,st]=await Promise.all([fetchRoad(NE),fetchRoad(TC),fetchRoad(NE,true),fetchRoad(TC,true)]);if(my!==seq)return;
+  const far=(n&&n.snap>800)||(t&&t.snap>800);osrm={N:n,T:t,sN:sn||n,sT:st||t,done:true,far};render();
+  if(far)note('這個位置離道路很遠（例如山區或水邊），開車、機車路線從最近的道路起算，結果僅供參考。');}
 
 function carT(dest,peak){const o=osrm[dest.key];if(o){const t=o.min*1.4+5;return peak?t*dest.carPeak:t;}return carModel(pick.p,dest,peak);}
-function scooterT(dest,peak,v=40){const o=osrm[dest.key];const r=o?o.km:Math.max(dist(pick.p,dest.p)*1.3,0.5);return scooterModel(r,peak,v);}
-function kmOf(m,dest){if(m!=='transit'){const o=osrm[dest.key];return o?o.km:Math.max(dist(pick.p,dest.p)*1.3,0.5);}
+function scooterT(dest,peak,v=40){const o=osrm['s'+dest.key]||osrm[dest.key];const r=o?o.km:Math.max(dist(pick.p,dest.p)*1.3,0.5);return scooterModel(r,peak,v);}
+function kmOf(m,dest){if(m!=='transit'){const o=m==='scooter'?(osrm['s'+dest.key]||osrm[dest.key]):osrm[dest.key];return o?o.km:Math.max(dist(pick.p,dest.p)*1.3,0.5);}
   const ss=steps(transit(pick.p,dest,true),dest);if(!ss.length)return NaN;let km=0;
   ss.forEach(s=>{if(s.kind==='walk'||s.kind==='bus')km+=dist(pick.p,dest.p)*1.3;if(s.kind==='access')km+=dist(pick.p,S[s.to])*1.3;if(s.kind==='egress')km+=dist(S[s.from],dest.p)*1.3;if(s.kind==='ride')for(let i=1;i<s.chain.length;i++)km+=dist(S[s.chain[i-1]],S[s.chain[i]])*1.1;});return km;}
 const k1=v=>isFinite(v)?(Math.round(v*10)/10).toFixed(1):'—';
@@ -520,7 +532,19 @@ function steps(res,dest){if(!isFinite(res.t))return [];
     cur=j;chain.push(nodes[cur].st);}
   return out;}
 
+let routeMode='transit';
+function roadSteps(o){const g=[];o.steps.forEach(x=>{const lab=x.name||(x.ref?x.ref:'');if(!lab&&x.km<0.3)return;const L2=lab||'巷弄／未命名道路';const last=g[g.length-1];if(last&&last.lab===L2)last.km+=x.km;else g.push({lab:L2,km:x.km});});
+  const big=g.filter((x,i)=>x.km>=0.4||i===0||i===g.length-1);return big.slice(0,14);}
+function drawRoad(dest){const car=routeMode==='car';const o=car?osrm[dest.key]:(osrm['s'+dest.key]||osrm[dest.key]);
+  const gm=`https://www.google.com/maps/dir/?api=1&origin=${pick.ll[0].toFixed(6)},${pick.ll[1].toFixed(6)}&destination=${dest.ll[0]},${dest.ll[1]}&travelmode=driving`;
+  $('#gmLink').href=gm;$('#gmLink').textContent=`在 Google 地圖查到${dest.short}的${car?'開車':'騎車'}路線 ↗`;
+  $('#gmNote').textContent=car?'路線依實際道路計算，實際路況以導航為準。':'機車路線已避開國道；Google 地圖連結以開車路線顯示，僅供參考。';
+  if(!o){$('#route').innerHTML=`<li><i></i><span>${osrm.done?'這個網頁環境無法查詢實際道路路線，請用下方 Google 地圖連結，或使用下載版／GitHub 版。':'正在查詢道路路線…'}</span><span></span></li>`;return;}
+  const tot=car?carT(dest,true):scooterT(dest,true);const gs=roadSteps(o);const col=car?'#e8963c':'#0f8a5f';
+  $('#route').innerHTML=`<li><i style="background:${col}"></i><span><b>全程 ${o.km.toFixed(1)} 公里，尖峰約 ${r5(tot)} 分</b></span><span></span></li>`+gs.map((x,i)=>`<li><i style="background:${col};opacity:${i===0||i===gs.length-1?1:.55}"></i><span>${i===0?'出發：':i===gs.length-1?'抵達前：':'經 '}${x.lab}</span><span class="t">${x.km.toFixed(1)} 公里</span></li>`).join('')+`<li><i style="background:${col}"></i><span>抵達${dest.short}</span><span></span></li>`;}
 function drawRoute(){routeLayer.clearLayers();if(!pick)return;const dest=routeDest==='N'?NE:TC;
+  if(routeMode!=='transit'){drawRoad(dest);return;}
+  $('#gmNote').textContent='公車路線號（如 205、中山幹線）需即時公車資料，請用上方連結查看。';
   const o=osrm[dest.key];
   L.polyline(o?o.geom:[pick.ll,dest.ll],{pane:'routePane',color:'#6b7280',weight:4,opacity:.7,dashArray:'7 7',interactive:false}).addTo(routeLayer);
   const ss=steps(transit(pick.p,dest,true),dest);
@@ -547,10 +571,11 @@ function render(){if(!pick)return;const ll=pick.ll;
   const sg=v=>isFinite(v)?(v>0?'+':v<0?'−':'')+Math.abs(v):'—';
   $('#tbody').innerHTML=['transit','car','scooter'].map(m=>{const r=res[m],d=r.Np-r.Tp,dk=Math.round((r.Nk-r.Tk)*10)/10;
     const chk=(ok,t)=>`<span class="${ok?'ck2 y':'ck2 n'}">${ok?'✓':'✕'} ${t}</span>`;
-    return `<tr><td><span class="md"><span class="ic">${ICON[m]}</span>${MODE_NAME[m]}</span></td><td><b>${k1(r.Tk)}<span class="sl">/</span>${r.TpR||f(r.Tp)}</b><small>離峰 ${r.ToR||f(r.To)} 分</small></td><td><b>${k1(r.Nk)}<span class="sl">/</span>${r.NpR||f(r.Np)}</b><small>離峰 ${r.NoR||f(r.No)} 分</small></td><td class="num ${d>0?'up':d<0?'down':''}"><b>${isFinite(dk)?sg(dk.toFixed(1)*1):'—'}<span class="sl">/</span>${sg(d)}</b><small>${d>0?'內湖較久':d<0?'內湖較快':'差不多'}</small></td><td><span class="sub ${r.sub.ok?'y':'n'}">${r.sub.ok?'符合':'不符合'}</span><div class="cond">${chk(r.sub.c1,'兩廠 '+plantKm.toFixed(0)+' km')}${chk(d>50,'多 '+d+' 分')}${chk(r.Np>90,'單程 '+r.Np+' 分')}</div></td></tr>`;}).join('');
+    return `<tr><td><span class="md"><span class="ic">${ICON[m]}</span>${MODE_NAME[m]}</span></td><td><b>${k1(r.Tk)}<span class="sl">/</span>${r.TpR||f(r.Tp)}</b><small>離峰 ${r.ToR||f(r.To)} 分</small></td><td><b>${k1(r.Nk)}<span class="sl">/</span>${r.NpR||f(r.Np)}</b><small>離峰 ${r.NoR||f(r.No)} 分</small></td><td class="num ${d>0?'up':d<0?'down':''}"><b>${isFinite(dk)?sg(dk.toFixed(1)*1):'—'}<span class="sl">/</span>${sg(d)}</b><small>${d>0?'內湖較久':d<0?'內湖較快':'差不多'}</small></td><td><span class="sub ${r.sub.ok?'y':'n'}">${r.sub.ok?'符合':'不符合'}</span><div class="cond">${chk(r.sub.c1,'兩廠 '+plantKm.toFixed(0)+' km')}${chk(d>50,'多 '+(isFinite(d)?d:'—')+' 分')}${chk(r.Np>90,'單程 '+(isFinite(r.Np)?r.Np:'—')+' 分')}</div></td></tr>`;}).join('');
   $('#plantKm').textContent=plantKm.toFixed(0);
   $('#src').textContent=(osrm.done?(osrm.N&&osrm.T?`開車、機車依實際道路路線（到內湖 ${osrm.N.km.toFixed(1)} km、到土城 ${osrm.T.km.toFixed(1)} km）`:'開車、機車無法連上路線服務，改用直線距離估算'):'開車、機車正在查詢實際道路路線…')+'；大眾運輸依搭乘路線計算。';
   drawRoute();}
+document.querySelectorAll('#modeTabs button').forEach(b=>b.onclick=()=>{routeMode=b.dataset.m;document.querySelectorAll('#modeTabs button').forEach(x=>x.classList.toggle('on',x===b));drawRoute();});
 document.querySelectorAll('#destTabs button').forEach(b=>b.onclick=()=>{routeDest=b.dataset.d;document.querySelectorAll('#destTabs button').forEach(x=>x.classList.toggle('on',x===b));drawRoute();});
 
 /* presets & search */
